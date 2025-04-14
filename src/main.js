@@ -1,4 +1,5 @@
 (function() {
+    var enableLog = false;
     var builtInDayjs;
     var builtInDayjsPluginUtc;
     var builtInDayjsPluginTimezone;
@@ -12,39 +13,13 @@
     builtInDayjs.extend(builtInDayjsPluginUtc);
     builtInDayjs.extend(builtInDayjsPluginTimezone);
 
-
     globalThis.hijackTimezone = function hijackTimezone(overrideTimezone) {
+        if (enableLog) console.log('hijackTimezone called with timezone:', overrideTimezone);
         var originalTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         
-        // Get the current date for DST check
-        var now = new Date();
-        
-        // Get timezone offsets for both timezones
-        var originalOffset = new Date().getTimezoneOffset();
-        var overrideOffset = new Date(now.toLocaleString('en-US', { timeZone: overrideTimezone })).getTimezoneOffset();
-        
-        // Check if both timezones have the same offset
-        if (originalOffset === overrideOffset) {
-            // Check if either timezone has DST by comparing summer and winter offsets
-            var summerDate = new Date(now.getFullYear(), 6, 1); // July 1st
-            var winterDate = new Date(now.getFullYear(), 0, 1); // January 1st
-            
-            var originalSummerOffset = new Date(summerDate.toLocaleString('en-US', { timeZone: originalTimezone })).getTimezoneOffset();
-            var originalWinterOffset = new Date(winterDate.toLocaleString('en-US', { timeZone: originalTimezone })).getTimezoneOffset();
-            
-            var overrideSummerOffset = new Date(summerDate.toLocaleString('en-US', { timeZone: overrideTimezone })).getTimezoneOffset();
-            var overrideWinterOffset = new Date(winterDate.toLocaleString('en-US', { timeZone: overrideTimezone })).getTimezoneOffset();
-            
-            // If either timezone has DST (summer and winter offsets differ)
-            if (originalSummerOffset !== originalWinterOffset || overrideSummerOffset !== overrideWinterOffset) {
-                // For DST timezones, require exact match
-                if (originalTimezone === overrideTimezone) {
-                    return;
-                }
-            } else {
-                // For non-DST timezones, just compare current offset
-                return;
-            }
+        if (originalTimezone === overrideTimezone) {
+            if (enableLog) console.log('Timezone unchanged, skipping override');
+            return;
         }
 
         builtInDayjs.tz.setDefault(overrideTimezone);
@@ -52,6 +27,7 @@
         var OriginalDate = globalThis.OriginalDate;
 
         function OverrideDate(...args) {
+            if (enableLog) console.log('OverrideDate constructor called with args:', args);
             var self;
 
             if (args.length === 0) {
@@ -75,6 +51,7 @@
 
             // Helper function to update date with dayjs
             function updateDateWithDayjs(updateFn) {
+                if (enableLog) console.log('updateDateWithDayjs called');
                 var d = builtInDayjs.tz(self);
                 d = updateFn(d);
                 var ts = d.valueOf();
@@ -82,26 +59,30 @@
                 return ts;
             }
             self.setFullYear = function (...args) {
+                if (enableLog) console.log('setFullYear called with args:', args);
                 return updateDateWithDayjs(function(d) {
                     d = d.year(args[0]);
                     args[1] !== undefined && (d = d.month(args[1]));
-                    args[2] !== undefined && (d = d.day(args[2]));
+                    args[2] !== undefined && (d = d.date(args[2]));
                     return d;
                 });
             }
             self.setMonth = function (...args) {
+                if (enableLog) console.log('setMonth called with args:', args);
                 return updateDateWithDayjs(function(d) {
                     d = d.month(args[0]);
-                    args[1] !== undefined && (d = d.day(args[1]));
+                    args[1] !== undefined && (d = d.date(args[1]));
                     return d;
                 });
             }
             self.setDate = function (...args) {
+                if (enableLog) console.log('setDate called with args:', args);
                 return updateDateWithDayjs(function(d) {
-                    return d.day(args[0]);
+                    return d.date(args[0]);
                 });
             }
             self.setHours = function (...args) {
+                if (enableLog) console.log('setHours called with args:', args);
                 return updateDateWithDayjs(function(d) {
                     d = d.hour(args[0]);
                     args[1] !== undefined && (d = d.minute(args[1]));
@@ -111,6 +92,7 @@
                 });
             }
             self.setMinutes = function (...args) {
+                if (enableLog) console.log('setMinutes called with args:', args);
                 return updateDateWithDayjs(function(d) {
                     d = d.minute(args[0]);
                     args[1] !== undefined && (d = d.second(args[1]));
@@ -120,28 +102,36 @@
             }
 
             self.getFullYear = function () {
+                if (enableLog) console.log('getFullYear called');
                 return builtInDayjs.tz(self).year();
             }
             self.getMonth = function () {
+                if (enableLog) console.log('getMonth called');
                 return builtInDayjs.tz(self).month();
             }
             self.getDate = function () {
+                if (enableLog) console.log('getDate called');
                 return builtInDayjs.tz(self).date();
             }
             self.getDay = function () {
+                if (enableLog) console.log('getDay called');
                 return builtInDayjs.tz(self).day();
             }
             self.getHours = function () {
+                if (enableLog) console.log('getHours called');
                 return builtInDayjs.tz(self).hour();
             }
             self.getMinutes = function () {
+                if (enableLog) console.log('getMinutes called');
                 return builtInDayjs.tz(self).minute();
             }
             self.getTimezoneOffset = function () {
+                if (enableLog) console.log('getTimezoneOffset called');
                 return builtInDayjs.tz(self).utcOffset();
             }
 
             self.toLocaleString = function (locales, options) {
+                if (enableLog) console.log('toLocaleString called with:', { locales, options });
                 const formatter = new Intl.DateTimeFormat(locales, {
                     ...options,
                     timeZone: overrideTimezone,
@@ -149,6 +139,7 @@
                 return formatter.format(self);
             }
             self.toLocaleDateString = function (locales, options) {
+                if (enableLog) console.log('toLocaleDateString called with:', { locales, options });
                 const formatter = new Intl.DateTimeFormat(locales, {
                     ...options,
                     timeZone: overrideTimezone,
@@ -156,6 +147,7 @@
                 return formatter.format(self);
             }
             self.toLocaleTimeString = function (locales, options) {
+                if (enableLog) console.log('toLocaleTimeString called with:', { locales, options });
                 const formatter = new Intl.DateTimeFormat(locales, {
                     ...options,
                     timeZone: overrideTimezone,
