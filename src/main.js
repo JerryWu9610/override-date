@@ -14,6 +14,39 @@
 
 
     globalThis.hijackTimezone = function hijackTimezone(overrideTimezone) {
+        var originalTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        
+        // Get the current date for DST check
+        var now = new Date();
+        
+        // Get timezone offsets for both timezones
+        var originalOffset = new Date().getTimezoneOffset();
+        var overrideOffset = new Date(now.toLocaleString('en-US', { timeZone: overrideTimezone })).getTimezoneOffset();
+        
+        // Check if both timezones have the same offset
+        if (originalOffset === overrideOffset) {
+            // Check if either timezone has DST by comparing summer and winter offsets
+            var summerDate = new Date(now.getFullYear(), 6, 1); // July 1st
+            var winterDate = new Date(now.getFullYear(), 0, 1); // January 1st
+            
+            var originalSummerOffset = new Date(summerDate.toLocaleString('en-US', { timeZone: originalTimezone })).getTimezoneOffset();
+            var originalWinterOffset = new Date(winterDate.toLocaleString('en-US', { timeZone: originalTimezone })).getTimezoneOffset();
+            
+            var overrideSummerOffset = new Date(summerDate.toLocaleString('en-US', { timeZone: overrideTimezone })).getTimezoneOffset();
+            var overrideWinterOffset = new Date(winterDate.toLocaleString('en-US', { timeZone: overrideTimezone })).getTimezoneOffset();
+            
+            // If either timezone has DST (summer and winter offsets differ)
+            if (originalSummerOffset !== originalWinterOffset || overrideSummerOffset !== overrideWinterOffset) {
+                // For DST timezones, require exact match
+                if (originalTimezone === overrideTimezone) {
+                    return;
+                }
+            } else {
+                // For non-DST timezones, just compare current offset
+                return;
+            }
+        }
+
         builtInDayjs.tz.setDefault(overrideTimezone);
         globalThis.OriginalDate = globalThis.Date;
         var OriginalDate = globalThis.OriginalDate;
