@@ -54,6 +54,18 @@
 
         function OverrideDate(...args) {
             var self;
+            var _dayjsInstance = null;
+
+            function getDayjsInstance() {
+                if (!_dayjsInstance) {
+                    _dayjsInstance = builtInDayjs.tz(self);
+                }
+                return _dayjsInstance;
+            }
+
+            function updateDayjsInstance() {
+                _dayjsInstance = builtInDayjs.tz(self);
+            }
 
             if (args.length === 0) {
                 self = new OriginalDate();
@@ -92,10 +104,11 @@
 
             // Helper function to update date with dayjs
             function updateDateWithDayjs(updateFn) {
-                var d = builtInDayjs.tz(self);
+                var d = getDayjsInstance();
                 d = updateFn(d);
                 var ts = d.valueOf();
                 self.setTime(ts);
+                updateDayjsInstance();
                 return ts;
             }
             self.setFullYear = function (...args) {
@@ -137,25 +150,25 @@
             }
 
             self.getFullYear = function () {
-                return builtInDayjs.tz(self).year();
+                return getDayjsInstance().year();
             }
             self.getMonth = function () {
-                return builtInDayjs.tz(self).month();
+                return getDayjsInstance().month();
             }
             self.getDate = function () {
-                return builtInDayjs.tz(self).date();
+                return getDayjsInstance().date();
             }
             self.getDay = function () {
-                return builtInDayjs.tz(self).day();
+                return getDayjsInstance().day();
             }
             self.getHours = function () {
-                return builtInDayjs.tz(self).hour();
+                return getDayjsInstance().hour();
             }
             self.getMinutes = function () {
-                return builtInDayjs.tz(self).minute();
+                return getDayjsInstance().minute();
             }
             self.getTimezoneOffset = function () {
-                return -builtInDayjs.tz(self).utcOffset();
+                return -getDayjsInstance().utcOffset();
             }
 
             self.toLocaleString = function (locales, options) {
