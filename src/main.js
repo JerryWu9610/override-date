@@ -55,16 +55,18 @@
         function OverrideDate(...args) {
             var self;
             var _dayjsInstance = null;
+            var _needsUpdate = true;
 
             function getDayjsInstance() {
-                if (!_dayjsInstance) {
+                if (!_dayjsInstance || _needsUpdate) {
                     _dayjsInstance = builtInDayjs.tz(self);
+                    _needsUpdate = false;
                 }
                 return _dayjsInstance;
             }
 
-            function updateDayjsInstance() {
-                _dayjsInstance = builtInDayjs.tz(self);
+            function markNeedsUpdate() {
+                _needsUpdate = true;
             }
 
             if (args.length === 0) {
@@ -108,7 +110,7 @@
                 d = updateFn(d);
                 var ts = d.valueOf();
                 self.setTime(ts);
-                updateDayjsInstance();
+                markNeedsUpdate();
                 return ts;
             }
             self.setFullYear = function (...args) {
