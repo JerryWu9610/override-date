@@ -1,5 +1,4 @@
 (function() {
-    var enableLog = false;
     var builtInDayjs;
     var builtInDayjsPluginUtc;
     var builtInDayjsPluginTimezone;
@@ -13,16 +12,31 @@
     builtInDayjs.extend(builtInDayjsPluginUtc);
     builtInDayjs.extend(builtInDayjsPluginTimezone);
 
+    // 缓存正则表达式
+    const ISO_TIMEZONE_REGEX = /[+-]\d{2}:?\d{2}$|Z$|UTC$/;
+    const RFC_TIMEZONE_REGEX = /\s(GMT|UT|UTC|EDT|EST|CST|CDT|MST|MDT|PST|PDT|[A-IK-Z])$/i;
+    const MMDDYYYY_REGEX = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+
+    // 检查日期字符串是否包含时区信息
+    function hasTimezone(dateString) {
+        if (ISO_TIMEZONE_REGEX.test(dateString)) return true;
+        if (RFC_TIMEZONE_REGEX.test(dateString)) return true;
+        return false;
+    }
+
+    // 转换日期格式，将 MM/DD/YYYY 转换为 YYYY/MM/DD
+    function convertDateFormat(dateString) {
+        const match = dateString.match(MMDDYYYY_REGEX);
+        if (match) {
+            return `${match[3]}/${match[1]}/${match[2]}`;
+        }
+        return dateString;
+    }
+
     globalThis.hijackTimezone = function hijackTimezone(overrideTimezone) {
-        if (enableLog) console.log('hijackTimezone called with:', {
-            overrideTimezone,
-            currentTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        });
-        
         var originalTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         
         if (originalTimezone === overrideTimezone) {
-            if (enableLog) console.log('Timezone unchanged:', originalTimezone);
             return;
         }
 
@@ -30,11 +44,15 @@
         globalThis.OriginalDate = globalThis.Date;
         var OriginalDate = globalThis.OriginalDate;
 
+        // Override Intl.DateTimeFormat().resolvedOptions().timeZone
+        var originalResolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+        Intl.DateTimeFormat.prototype.resolvedOptions = function() {
+            var options = originalResolvedOptions.call(this);
+            options.timeZone = overrideTimezone;
+            return options;
+        };
+
         function OverrideDate(...args) {
-            if (enableLog) console.log('OverrideDate constructor called with:', {
-                args,
-                currentTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-            });
             var self;
 
             if (args.length === 0) {
@@ -42,7 +60,21 @@
             } else if (args.length === 1 && typeof args[0] === 'number') {
                 self = new OriginalDate(args[0]);
             } else if (args.length === 1 && typeof args[0] === 'string') {
-                self = new OriginalDate(builtInDayjs.tz(args[0]).valueOf());
+                // 检查字符串是否包含时区信息
+                if (hasTimezone(args[0])) {
+                    // 如果包含时区信息，直接使用 OriginalDate
+                    self = new OriginalDate(args[0]);
+                } else {
+                    // 先使用原生 Date 解析，检查是否是有效日期
+                    const timestamp = OriginalDate.parse(args[0]);
+                    if (isNaN(timestamp)) {
+                        self = new OriginalDate(NaN);
+                    } else {
+                        // 如果不包含时区信息，使用 dayjs 解析
+                        const dateStr = convertDateFormat(args[0]);
+                        self = new OriginalDate(builtInDayjs.tz(dateStr).valueOf());
+                    }
+                }
             } else if (args.length === 1) {
                 self = new OriginalDate(args[0]);
             } else {
@@ -60,29 +92,13 @@
 
             // Helper function to update date with dayjs
             function updateDateWithDayjs(updateFn) {
-                if (enableLog) console.log('updateDateWithDayjs called with:', {
-                    currentValue: self.toString(),
-                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                });
                 var d = builtInDayjs.tz(self);
                 d = updateFn(d);
                 var ts = d.valueOf();
                 self.setTime(ts);
-                if (enableLog) console.log('updateDateWithDayjs result:', {
-                    newValue: self.toString(),
-                    timestamp: ts
-                });
                 return ts;
             }
             self.setFullYear = function (...args) {
-                if (enableLog) console.log('setFullYear called with:', {
-                    args,
-                    currentValue: {
-                        year: self.getFullYear(),
-                        month: self.getMonth(),
-                        date: self.getDate()
-                    }
-                });
                 return updateDateWithDayjs(function(d) {
                     d = d.year(args[0]);
                     args[1] !== undefined && (d = d.month(args[1]));
@@ -91,13 +107,6 @@
                 });
             }
             self.setMonth = function (...args) {
-                if (enableLog) console.log('setMonth called with:', {
-                    args,
-                    currentValue: {
-                        month: self.getMonth(),
-                        date: self.getDate()
-                    }
-                });
                 return updateDateWithDayjs(function(d) {
                     d = d.month(args[0]);
                     args[1] !== undefined && (d = d.date(args[1]));
@@ -105,24 +114,11 @@
                 });
             }
             self.setDate = function (...args) {
-                if (enableLog) console.log('setDate called with:', {
-                    args,
-                    currentValue: self.getDate()
-                });
                 return updateDateWithDayjs(function(d) {
                     return d.date(args[0]);
                 });
             }
             self.setHours = function (...args) {
-                if (enableLog) console.log('setHours called with:', {
-                    args,
-                    currentValue: {
-                        hours: self.getHours(),
-                        minutes: self.getMinutes(),
-                        seconds: self.getSeconds(),
-                        milliseconds: self.getMilliseconds()
-                    }
-                });
                 return updateDateWithDayjs(function(d) {
                     d = d.hour(args[0]);
                     args[1] !== undefined && (d = d.minute(args[1]));
@@ -132,14 +128,6 @@
                 });
             }
             self.setMinutes = function (...args) {
-                if (enableLog) console.log('setMinutes called with:', {
-                    args,
-                    currentValue: {
-                        minutes: self.getMinutes(),
-                        seconds: self.getSeconds(),
-                        milliseconds: self.getMilliseconds()
-                    }
-                });
                 return updateDateWithDayjs(function(d) {
                     d = d.minute(args[0]);
                     args[1] !== undefined && (d = d.second(args[1]));
@@ -149,85 +137,47 @@
             }
 
             self.getFullYear = function () {
-                const value = builtInDayjs.tz(self).year();
-                if (enableLog) console.log('getFullYear returned:', value);
-                return value;
+                return builtInDayjs.tz(self).year();
             }
             self.getMonth = function () {
-                const value = builtInDayjs.tz(self).month();
-                if (enableLog) console.log('getMonth returned:', value);
-                return value;
+                return builtInDayjs.tz(self).month();
             }
             self.getDate = function () {
-                const value = builtInDayjs.tz(self).date();
-                if (enableLog) console.log('getDate returned:', value);
-                return value;
+                return builtInDayjs.tz(self).date();
             }
             self.getDay = function () {
-                const value = builtInDayjs.tz(self).day();
-                if (enableLog) console.log('getDay returned:', value);
-                return value;
+                return builtInDayjs.tz(self).day();
             }
             self.getHours = function () {
-                const value = builtInDayjs.tz(self).hour();
-                if (enableLog) console.log('getHours returned:', value);
-                return value;
+                return builtInDayjs.tz(self).hour();
             }
             self.getMinutes = function () {
-                const value = builtInDayjs.tz(self).minute();
-                if (enableLog) console.log('getMinutes returned:', value);
-                return value;
+                return builtInDayjs.tz(self).minute();
             }
             self.getTimezoneOffset = function () {
-                const value = builtInDayjs.tz(self).utcOffset();
-                if (enableLog) console.log('getTimezoneOffset returned:', {
-                    value,
-                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                });
-                return value;
+                return -builtInDayjs.tz(self).utcOffset();
             }
 
             self.toLocaleString = function (locales, options) {
-                if (enableLog) console.log('toLocaleString called with:', {
-                    locales,
-                    options,
-                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                });
-                const formatter = new Intl.DateTimeFormat(locales, {
+                var formatter = new Intl.DateTimeFormat(locales, {
                     ...options,
                     timeZone: overrideTimezone,
                 });
-                const result = formatter.format(self);
-                if (enableLog) console.log('toLocaleString returned:', result);
-                return result;
+                return formatter.format(self);
             }
             self.toLocaleDateString = function (locales, options) {
-                if (enableLog) console.log('toLocaleDateString called with:', {
-                    locales,
-                    options,
-                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                });
-                const formatter = new Intl.DateTimeFormat(locales, {
+                var formatter = new Intl.DateTimeFormat(locales, {
                     ...options,
                     timeZone: overrideTimezone,
                 });
-                const result = formatter.format(self);
-                if (enableLog) console.log('toLocaleDateString returned:', result);
-                return result;
+                return formatter.format(self);
             }
             self.toLocaleTimeString = function (locales, options) {
-                if (enableLog) console.log('toLocaleTimeString called with:', {
-                    locales,
-                    options,
-                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                });
-                const formatter = new Intl.DateTimeFormat(locales, {
+                var formatter = new Intl.DateTimeFormat(locales, {
                     ...options,
                     timeZone: overrideTimezone,
                 });
-                const result = formatter.format(self);
-                if (enableLog) console.log('toLocaleTimeString returned:', result);
-                return result;
+                return formatter.format(self);
             }
 
             return self;
@@ -241,6 +191,33 @@
 
         OverrideDate.prototype = globalThis.OriginalDate.prototype;
         OverrideDate.prototype.constructor = OverrideDate;
+
+        // 复写 Date.parse 静态方法
+        OverrideDate.parse = function(dateString) {
+            if (typeof dateString !== 'string') {
+                return NaN;
+            }
+
+            // 检查字符串是否包含时区信息
+            if (hasTimezone(dateString)) {
+                // 如果包含时区信息，直接使用 OriginalDate.parse
+                return OriginalDate.parse(dateString);
+            }
+
+            // 先使用原生 Date 解析，检查是否是有效日期
+            const timestamp = OriginalDate.parse(dateString);
+            if (isNaN(timestamp)) {
+                return NaN;
+            }
+
+            try {
+                // 如果不包含时区信息，使用 dayjs 解析
+                const convertedDateStr = convertDateFormat(dateString);
+                return builtInDayjs.tz(convertedDateStr).valueOf();
+            } catch (e) {
+                return NaN;
+            }
+        };
 
         globalThis.Date = OverrideDate;
     }
